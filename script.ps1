@@ -1,11 +1,15 @@
-﻿$jobsQueue = New-Object System.Collections.Concurrent.ConcurrentQueue[String]
-$workinkDir = "C:\Users\lamba\Downloads\Video"
-$ffmpeg = "C:\Users\lamba\Desktop\ffmpeg-3.4.1-win64-static\bin\ffmpeg.exe"
+﻿$workinkDir = "C:\Users\lamba\Downloads\Video"
+$currentDir = split-path -parent $MyInvocation.MyCommand.Definition
+$ffmpeg = $currentDir + "\dependecies\ffmpeg-3.4.1-win64-static\bin\ffmpeg.exe"
 $items = Get-ChildItem -Path "C:\Users\lamba\Downloads\Video\*" -Include *.mp4 -File
 $album = "Zelda - Breath of the Wild Soundtrack"
 $artists = "Manaka Kataoka/Yasuaki Iwata"
 $year = "2017"
 $genre = "Soundtrack"
+$global:jobsQueue = New-Object System.Collections.Concurrent.ConcurrentQueue[String]
+$logPath = $currentDir + "\log.txt"
+$liveObj = @{data = $global:jobsQueue}
+Get-Date | Out-File -FilePath $logPath -Encoding utf8
 
 foreach($rawPath in $items){
     $number = $rawPath.ToString() -replace "(.*(?:\\|/))(\d+)\.(.*?) ?- Zelda.*",'$2'
@@ -15,39 +19,45 @@ foreach($rawPath in $items){
     " -metadata artist=""$artists"" -metadata album=""$album"" -metadata year=""$year"" " +
     "-metadata track=""$number"" -metadata genre=""$genre"" -y ""$workinkDir\outputs2\$output"""
     
-    "N.: " + $number + " | Title: " + $title
-    "input: " + $rawPath.ToString();
-    "output path: " + $workinkDir + "\outputs2\" + $output
-    "ffmpeg params: " + $ffmpegParam
+    "N.: " + $number + " | Title: " + $title | Out-File -FilePath $logPath -Encoding utf8 -Append
+    "input: " + $rawPath.ToString() | Out-File -FilePath $logPath -Encoding utf8 -Append
+    "output path: " + $workinkDir + "\outputs2\" + $output | Out-File -FilePath $logPath -Encoding utf8 -Append
+    "ffmpeg params: " + $ffmpegParam | Out-File -FilePath $logPath -Encoding utf8 -Append
+    "_____________________"| Out-File -FilePath $logPath -Encoding utf8 -Append
     
     $global:jobsQueue.Enqueue($ffmpegParam)
-} 
-while($true){
-    if($queue.TryDequeue($params)){
-        $pinfo = New-Object System.Diagnostics.ProcessStartInfo($ffmpeg, $params)
-        #$pinfoMap.$rawPath.UseShellExecute = $false
-        #$pinfoMap.$rawPath.CreateNoWindow = $true
-        $p = New-Object System.Diagnostics.Process
-        $p.StartInfo = $pinfo
-        $p.Start()
-        $p.WaitForExit()
-    } else {break}
 }
-    
 $block = {
-    param($queue, $ffmpeg)
+    Param($liveObj_, $ffmpegPath, $processLogPath)
+    $global:params = "";
+    $queueParam = $liveObj_.data
+    "" | Out-File -filepath $processLogPath -Encoding utf8 -Append
+    "_________________________" | Out-File -filepath $processLogPath -Encoding utf8 -Append
+    "queueParam size: " + $queueParam | Out-File -filepath $processLogPath -Encoding utf8
+    "ffmpegPath : $ffmpegPath" | Out-File -filepath $processLogPath -Encoding utf8 -Append
     while($true){
-        if($queue.TryDequeue($params)){
-            $pinfo = New-Object System.Diagnostics.ProcessStartInfo($ffmpeg, $params)
-            $pinfoMap.$rawPath.UseShellExecute = $false
-            $pinfoMap.$rawPath.CreateNoWindow = $true
+        if($queueParam.TryDequeue([ref]$global:params)){
+            "l' IF è true" | Out-File -filepath $processLogPath -Encoding utf8 -Append
+            $pinfo = New-Object System.Diagnostics.ProcessStartInfo($ffmpegPath, $params) 
+            $pinfo| Out-File -filepath $processLogPath -Encoding utf8 -Append
+            $pinfo.UseShellExecute = $false
+            $pinfo.CreateNoWindow = $true
             $p = New-Object System.Diagnostics.Process
+            $p | Out-File -filepath $processLogPath -Encoding utf8 -Append
             $p.StartInfo = $pinfo
-            $p.Start()
-            $p.WaitForExit()
-        } else {break}
+            $p.Start()| Out-File -filepath $processLogPath -Encoding utf8 -Append
+            $p.WaitForExit()| Out-File -filepath $processLogPath -Encoding utf8 -Append
+        } else {
+            "FINE CICLO WHILE" | Out-File -filepath $processLogPath -Encoding utf8 -Append
+            break
+        }
     }
 }
 for($i = 0; $i -lt 1; $i++){
-    Start-Job -Name "process $i" $block -ArgumentList $global:jobsQueue,$ffmpeg
+    $p = [PowerShell]::Create()
+    $p.AddScript($block).AddArgument($liveObj).addArgument($ffmpeg).addArgument("$currentDir\$i.txt")
+    $job = $p.BeginInvoke();
+    $done = $job.AsyncWaitHandle.WaitOne()
+    $p.EndInvoke($job);
+    $p.Streams.error
 }
