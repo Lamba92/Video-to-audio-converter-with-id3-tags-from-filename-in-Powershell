@@ -6,28 +6,35 @@ $album = "Zelda - Breath of the Wild Soundtrack"
 $artists = "Manaka Kataoka/Yasuaki Iwata"
 $year = "2017"
 $genre = "Soundtrack"
+$sem = New-Object System.Threading.Semaphore(1, 1)
+$pinfoMap = @{}
+$pMap = @{}
+$paramsMap = @{}
 foreach ($input in $items){
-    $number = $input.ToString() -replace "(.*(?:\\|/))(\d+)\.(.*?) ?-.*",'$2'
-    $title = $input.ToString() -replace "(.*(?:\\|/))(\d+)\.(.*?) ?-.*",'$3'
+    $number = $input.ToString() -replace "(.*(?:\\|/))(\d+)\.(.*?) ?- Zelda.*",'$2'
+    $title = $input.ToString() -replace "(.*(?:\\|/))(\d+)\.(.*?) ?- Zelda.*",'$3'
     $output = $title + ".mp3"
-    $ffmpegParams = " -i """ + $input + """ -vn -codec:a libmp3lame -qscale:a 4 -metadata title=""" + 
-        $title + """ -metadata artist=""" + $artists + """ -metadata album=""" + 
-        $album +  """ -metadata year=""" + $year + """ -metadata track=""" +
-        $number +  """ -metadata genre=""" + $genre + """ """ +
-        $workinkDir + "\outputs\" + $output + """" 
-    
-    $id3Params = " -t " + """" + $title + """" + " -a " + $artists + " -l " + $album + 
-        " - n " + $number + " -y " + $year + " -g " + $genre + " """ + $workinkDir + 
-        "\outputs\" + $output + """"
+    $paramsMap.Add($input," -i ""$input"" -vn -codec:a libmp3lame -qscale:a 4 -metadata title=""$title""" + 
+    " -metadata artist=""$artists"" -metadata album=""$album"" -metadata year=""$year"" " +
+    "-metadata track=""$number"" -metadata genre=""$genre"" -y ""$workinkDir\outputs2\$output""")
     
     "N.: " + $number + " | Title: " + $title
     "input: " + $input.ToString();
-    "output path: " + $workinkDir + "\outputs\" + $output
-    "ffmpeg params: " + $ffmpegParams
-    "id3 params: " + $id3Params
-    ""
-    ""
-    Start-Process $ffmpeg $ffmpegParams -Wait -WindowStyle Hidden
-    "ffmpeg eseguito"
+    "output path: " + $workinkDir + "\outputs2\" + $output
+    "ffmpeg params: " + $paramsMap.$input
+
+    $pinfoMap.Add($input, (New-Object System.Diagnostics.ProcessStartInfo($ffmpeg, $paramsMap.$input)));
+    $pinfoMap.$input.UseShellExecute = $false
+    $pinfoMap.$input.CreateNoWindow = $true
+    $pinfoMap.$input.RedirectStandardError = $true
+    $pinfoMap.$input.RedirectStandardOutput = $true
+    $pMap.Add($input, (New-Object System.Diagnostics.Process))
+    Register-ObjectEvent -InputObject $pMap.$input -EventName "Exited" -Action {
+        $sem.Release()
+        } | Out-Null
+    $pMap.$input.StartInfo = $pinfoMap.$input
+    #$sem.WaitOne()
+    $pMap.$input.Start()
+    #$pMap.$input.WaitForExit();
     "------------------------------"
 }
